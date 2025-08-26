@@ -1,0 +1,21 @@
+<Project>
+	<PropertyGroup>
+		<_PRFX_TargetPath>$(MSBuildProjectDirectory)\obj\$projectContentFolderName$</_PRFX_TargetPath>
+  		<_PRFX_CurrentVersion>$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName($([System.IO.Path]::GetDirectoryName($(MSBuildThisFileDirectory)))))))</_PRFX_CurrentVersion>
+		<_PRFX_VersionFilePath>$(_PRFX_TargetPath)\.version-$(_PRFX_CurrentVersion)</_PRFX_VersionFilePath>
+	</PropertyGroup>
+
+	<Target Name="ProvideContentFiles" AfterTargets="CollectPackageReferences" Condition="!Exists('$(_PRFX_VersionFilePath)')">
+		<ItemGroup>
+			<_PRFX_FilesToCopy Include="$(MSBuildThisFileDirectory)..\$packageContentFolderName$\**\*" />
+		</ItemGroup>
+		<RemoveDir Directories="$(_PRFX_TargetPath)" />
+		<Copy SourceFiles="@(_PRFX_FilesToCopy)"
+			  DestinationFolder="$(_PRFX_TargetPath)\%(RecursiveDir)"
+			  UseSymbolicLinksIfPossible="true" />
+		<WriteLinesToFile File="$(_PRFX_VersionFilePath)"
+						  Lines="$(_PRFX_CurrentVersion)"
+						  Overwrite="true" />
+		<Message Text="Provided content files in obj directory" />
+	</Target>
+</Project>
