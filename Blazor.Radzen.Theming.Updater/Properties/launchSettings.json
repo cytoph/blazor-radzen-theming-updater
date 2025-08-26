@@ -1,0 +1,22 @@
+{
+  "profiles": {
+    "Help": {
+      "commandName": "Project",
+      "commandLineArgs": "--help",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "Development": {
+      "commandName": "Project",
+      "commandLineArgs": "--no-commit",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    },
+    "Production": {
+      "commandName": "Project",
+      "commandLineArgs": "--push"
+    }
+  }
+}

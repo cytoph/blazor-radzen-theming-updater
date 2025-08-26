@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+    <metadata>
+        <id>$packageId$</id>
+        <version>$version$</version>
+        <title>SCSS Source Files for Radzen Blazor Components</title>
+        <authors>$authors$</authors>
+        <owners></owners>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <license type="expression">MIT</license>
+        <icon>icon.png</icon>
+        <readme>README.md</readme>
+        <projectUrl>$gitHubAddress$</projectUrl>
+        <description>Provides the SCSS source files from the Radzen.Blazor components library for custom theme development. Contains all base and component stylesheets that can be imported and customized in your own SCSS workflow.</description>
+        <copyright>$authors$</copyright>
+        <tags>blazor radzen scss stylesheets components theming styling</tags>
+        <repository type="git" url="$gitHubAddress$.git" branch="$branch$" commit="$commitId$" />
+    </metadata>
+</package>
