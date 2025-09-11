@@ -1,4 +1,4 @@
-name: Daily .NET Application Run
+name: CI
 
 on:
   # Run daily at 2:00 AM UTC
