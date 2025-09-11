@@ -56,9 +56,6 @@ try
     // Scoped services
     builder.Services.AddScoped<FileService>();
 
-    // Cocona Commands
-    builder.Services.AddSingleton<CreateReleaseCommand>();
-
     var app = builder.ToConsoleAppBuilder();
 
     app.Add<CreateReleaseCommand>();
