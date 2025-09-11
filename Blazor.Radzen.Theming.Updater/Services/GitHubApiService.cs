@@ -201,13 +201,23 @@ internal partial class GitHubApiService : ICleanUpService
         foreach (string filePath in Directory.GetFiles(stagingFolder, "*", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(stagingFolder, filePath).Replace(Path.DirectorySeparatorChar, '/');
-            string content = await File.ReadAllTextAsync(filePath);
+            byte[] rawContent = await File.ReadAllBytesAsync(filePath);
+            string encodedContent = Convert.ToBase64String(rawContent);
+
+            NewBlob newBlob = new()
+            {
+                Encoding = EncodingType.Base64,
+                Content = encodedContent,
+            };
+
+            BlobReference blob = await _client.Git.Blob.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newBlob);
 
             newTree.Tree.Add(new()
             {
                 Path = relativePath,
-                Content = content,
                 Mode = Octokit.FileMode.File,
+                Type = TreeType.Blob,
+                Sha = blob.Sha,
             });
         }
 
