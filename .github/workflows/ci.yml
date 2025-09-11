@@ -8,11 +8,6 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
-      environment:
-        description: 'Environment to run in'
-        required: false
-        default: ''
-        type: string
       parameters:
         description: 'Additional parameters to pass to the application'
         required: false
@@ -22,7 +17,6 @@ on:
 jobs:
   run-application:
     runs-on: windows-latest
-    environment: ${{ github.event.inputs.environment }}
     
     steps:
     - name: Checkout repository
