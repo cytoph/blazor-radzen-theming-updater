@@ -1,0 +1,33 @@
+name: Daily .NET Application Run
+
+on:
+  # Run daily at 2:00 AM UTC
+  schedule:    
+    - cron: '0 2 * * *'
+    
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      parameters:
+        description: 'Additional parameters to pass to the application'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  run-application:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+      
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: '9.0.x'
+        
+    - name: Run application
+      working-directory: .\Blazor.Radzen.Theming.Updater
+      run: dotnet run --no-launch-profile --configuration Release -- ${{ github.event.inputs.parameters || '' }}
+      
