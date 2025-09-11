@@ -35,5 +35,8 @@ jobs:
         
     - name: Run application
       working-directory: .\Blazor.Radzen.Theming.Updater
+      env:
+        GITHUB__TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        NUGET__APIKEY: ${{ secrets.NUGET_API_KEY }}
       run: dotnet run --no-launch-profile --configuration Release -- ${{ github.event.inputs.parameters || '' }}
       
