@@ -1,6 +1,6 @@
 # Blazor.Radzen.Theming.Updater
 
-A program that updates the **Blazor.Radzen.Theming** NuGet package. It automates the process of creating, committing, and releasing updates for the package, including generating necessary files, interacting with GitHub, and publishing to NuGet.
+A program that updates the [**Blazor.Radzen.Theming**](https://github.com/cytoph/blazor-radzen-theming) [NuGet package](https://www.nuget.org/packages/Blazor.Radzen.Theming/). It automates the process of creating, committing, and releasing updates for the package, including generating necessary files, interacting with GitHub, and publishing to NuGet.
 
 ## Arguments and Configuration
 
