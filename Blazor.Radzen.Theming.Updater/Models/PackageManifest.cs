@@ -5,7 +5,7 @@ namespace Blazor.Radzen.Theming.Updater.Models;
 /// <summary>
 /// Manifest describing the package being produced (Blazor.Radzen.Theming) and its repository details.
 /// </summary>
-internal class PackageManifest
+internal sealed class PackageManifest
 {
     public const string SectionName = "Package";
 

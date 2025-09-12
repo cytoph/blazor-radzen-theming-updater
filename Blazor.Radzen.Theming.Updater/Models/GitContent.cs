@@ -3,7 +3,7 @@
 /// <summary>
 /// Represents an entry returned from the GitHub contents API.
 /// </summary>
-internal class GitContent
+internal sealed class GitContent
 {
     /// <summary>
     /// The entry's name.

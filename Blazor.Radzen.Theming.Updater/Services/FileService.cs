@@ -14,7 +14,7 @@ using System.Xml.Linq;
 
 namespace Blazor.Radzen.Theming.Updater.Services;
 
-internal partial class FileService : ICleanUpService
+internal sealed partial class FileService : ICleanUpService
 {
     private const string ResourcesFolderName = "Resources";
     private const string AssetsFolderName = "Assets";
@@ -399,7 +399,7 @@ internal partial class FileService : ICleanUpService
                 string relativeFilePath = Path.GetRelativePath(_basePackageManifest.ContentFolderPath, content.Path);
                 string localFilePath = Path.Combine(contentFolderPath, relativeFilePath);
 
-                tasks.Add(DownloadFileAsync(content.DownloadUrl, localFilePath, cancellationToken));
+                tasks.Add(DownloadFileAsync(content.DownloadUrl!, localFilePath, cancellationToken));
             }
             else if (content.Type == GitContentType.Directory)
             {

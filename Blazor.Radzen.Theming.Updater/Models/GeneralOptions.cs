@@ -3,7 +3,7 @@
 /// <summary>
 /// General options controlling program metadata and run behavior.
 /// </summary>
-internal class GeneralOptions
+internal sealed class GeneralOptions
 {
     public const string SectionName = "General";
 

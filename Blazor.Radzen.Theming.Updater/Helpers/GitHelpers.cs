@@ -2,7 +2,7 @@
 
 namespace Blazor.Radzen.Theming.Updater.Helpers;
 
-internal class GitHelpers
+internal static class GitHelpers
 {
     public const string ReleasesPath = "releases";
 

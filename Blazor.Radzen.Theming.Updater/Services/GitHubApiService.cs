@@ -9,7 +9,7 @@ using Octokit;
 
 namespace Blazor.Radzen.Theming.Updater.Services;
 
-internal partial class GitHubApiService : ICleanUpService
+internal sealed partial class GitHubApiService : ICleanUpService
 {
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(1);
     private static readonly string[] MainBranchNames = ["main", "master"];
