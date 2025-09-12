@@ -7,7 +7,7 @@ using System.Diagnostics;
 
 namespace Blazor.Radzen.Theming.Updater.Services;
 
-internal partial class NuGetCliService : ICleanUpService
+internal sealed partial class NuGetCliService : ICleanUpService
 {
     private readonly ILogger<NuGetCliService> _logger;
     private readonly PackageManifest _packageManifest;

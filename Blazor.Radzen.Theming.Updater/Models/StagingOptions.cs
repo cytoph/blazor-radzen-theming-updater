@@ -3,7 +3,7 @@
 /// <summary>
 /// Staging options controlling how temporary folder(s) are created and retained during execution.
 /// </summary>
-internal class StagingOptions
+internal sealed class StagingOptions
 {
     public const string SectionName = "Staging";
 

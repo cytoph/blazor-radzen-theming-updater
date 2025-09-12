@@ -3,7 +3,7 @@
 /// <summary>
 /// GitHub integration options used for authentication and templated content.
 /// </summary>
-internal class GitHubOptions
+internal sealed class GitHubOptions
 {
     public const string SectionName = "GitHub";
 

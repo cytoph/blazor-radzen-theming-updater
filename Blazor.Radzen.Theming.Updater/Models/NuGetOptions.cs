@@ -3,7 +3,7 @@
 /// <summary>
 /// NuGet publishing options.
 /// </summary>
-internal class NuGetOptions
+internal sealed class NuGetOptions
 {
     public const string SectionName = "NuGet";
 

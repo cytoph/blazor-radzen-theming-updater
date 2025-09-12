@@ -3,7 +3,7 @@
 /// <summary>
 /// Artifact packaging options used when generating the NuGet package contents and build assets.
 /// </summary>
-internal class ArtifactOptions
+internal sealed class ArtifactOptions
 {
     public const string SectionName = "Artifact";
 
