@@ -196,9 +196,27 @@ internal partial class GitHubApiService : ICleanUpService
     /// <returns>The SHA identifier of the newly created commit.</returns>
     public async Task<string> CreateCommit(string stagingFolder, string commitMessage)
     {
+        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.RepositoryBranchReference);
+
+        Commit currentCommit = await _client.Git.Commit.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, branchReference.Object.Sha);
+        TreeResponse currentTree = await _client.Git.Tree.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, currentCommit.Tree.Sha);
+
         NewTree newTree = new();
 
-        foreach (string filePath in Directory.GetFiles(stagingFolder, "*", SearchOption.AllDirectories))
+        string[] newRootItems = [.. Directory.EnumerateFileSystemEntries(stagingFolder).Select(p => Path.GetRelativePath(stagingFolder, p))];
+
+        foreach (TreeItem item in currentTree.Tree.Where(t => !newRootItems.Contains(t.Path, StringComparer.OrdinalIgnoreCase)))
+        {
+            newTree.Tree.Add(new()
+            {
+                Path = item.Path,
+                Mode = item.Mode,
+                Type = item.Type.Value,
+                Sha = item.Sha,
+            });
+        }
+
+        foreach (string filePath in Directory.EnumerateFiles(stagingFolder, "*", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(stagingFolder, filePath).Replace(Path.DirectorySeparatorChar, '/');
             byte[] rawContent = await File.ReadAllBytesAsync(filePath);
@@ -224,8 +242,6 @@ internal partial class GitHubApiService : ICleanUpService
         LogCreatingCommit(newTree.Tree.Count, _packageManifest.RepositoryBranchName, commitMessage);
 
         TreeResponse tree = await _client.Git.Tree.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newTree);
-
-        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.RepositoryBranchReference);
 
         NewCommit newCommit = new(commitMessage, tree.Sha, [branchReference.Object.Sha]);
 
