@@ -21,6 +21,29 @@ The following arguments can be passed to the program to override default behavio
 | `--clean-nuget`        | Clean up the latest NuGet package before the operation.                            |
 | `--clean-all`          | Clean up all staging files (default), GitHub repository, and latest NuGet package. |
 
+#### Host Builder Arguments
+
+In addition to the application-specific arguments listed above, you can also pass arguments to the underlying .NET host builder by using the `--` separator. Any arguments placed after `--` will be passed directly to the host builder, allowing you to override configuration settings or modify the host's behavior.
+
+**Syntax:**
+```
+Blazor.Radzen.Theming.Updater [app-arguments] -- [host-builder-arguments]
+```
+
+**Examples:**
+```bash
+# Override configuration using host builder arguments
+Blazor.Radzen.Theming.Updater --pack -- --environment Production
+
+# Set configuration values through host builder
+Blazor.Radzen.Theming.Updater --push -- General:Authors="New Author"
+
+# Combine multiple host builder arguments
+Blazor.Radzen.Theming.Updater --no-commit -- --environment Staging General:VersionCreationLimit=1
+```
+
+This feature follows the same pattern as the `dotnet run` command, where `dotnet build` arguments come before `--` and application/runtime arguments come after it. For more information about available host builder arguments, refer to the [Microsoft .NET Generic Host documentation](https://docs.microsoft.com/en-us/dotnet/core/extensions/generic-host).
+
 #### Constraints
 
 - As stated above, `--no-commit` implies `--no-release`, and `--push` implies `--pack`.
