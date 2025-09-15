@@ -20,7 +20,11 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    HostApplicationBuilder builder = Host.CreateApplicationBuilder();
+    int splitIndex = Array.IndexOf(args, "--");
+    string[] commandArgs = splitIndex >= 0 ? args[..splitIndex] : args;
+    string[] builderArgs = splitIndex >= 0 ? args[(splitIndex + 1)..] : [];
+
+    HostApplicationBuilder builder = Host.CreateApplicationBuilder(builderArgs);
 
 #if DEBUG
     if (!builder.Environment.IsDevelopment())
@@ -60,7 +64,7 @@ try
 
     app.Add<CreateReleaseCommand>();
 
-    await app.RunAsync(args);
+    await app.RunAsync(commandArgs);
 }
 catch (Exception ex)
 {
