@@ -94,7 +94,10 @@ internal sealed partial class CreateReleaseCommand : IDisposable
         LogLatestPackageVersion(latestPackageVersion);
 
         SemanticVersion[] basePackageVersions = await _nuGetApiService.GetPackageVersions(_basePackageManifest.Id, cancellationToken);
-        SemanticVersion[] higherBasePackageVersions = [.. basePackageVersions.Where(v => v > latestPackageVersion).Order()];
+        SemanticVersion latestBaseVersion = VersionHelper.IsOldFormat(latestPackageVersion)
+            ? latestPackageVersion
+            : VersionHelper.ToBaseVersion(latestPackageVersion);
+        SemanticVersion[] higherBasePackageVersions = [.. basePackageVersions.Where(v => v > latestBaseVersion).Order()];
 
         if (higherBasePackageVersions.Length == 0)
         {
@@ -154,9 +157,11 @@ internal sealed partial class CreateReleaseCommand : IDisposable
 
             FileService iterationFileService = scope.ServiceProvider.GetRequiredService<FileService>();
 
+            SemanticVersion paddedBaseVersion = VersionHelper.ToPackageVersion(basePackageVersion);
+
             SemanticVersion packageVersion = !string.IsNullOrEmpty(_packageManifest.PreReleaseIdentifier)
-                ? basePackageVersion.WithReleaseLabel($"{_packageManifest.PreReleaseIdentifier}.{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}")
-                : new(basePackageVersion);
+                ? paddedBaseVersion.WithReleaseLabel($"{_packageManifest.PreReleaseIdentifier}.{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}")
+                : paddedBaseVersion;
 
             LogPackageVersionResolved(packageVersion);
 
