@@ -2,13 +2,24 @@
 
 A program that updates the [**Blazor.Radzen.Theming**](https://github.com/cytoph/blazor-radzen-theming) [NuGet package](https://www.nuget.org/packages/Blazor.Radzen.Theming/). It automates the process of creating, committing, and releasing updates for the package, including generating necessary files, interacting with GitHub, and publishing to NuGet.
 
+## Versioning
+
+The theming package's version is derived from the base package (Radzen) version using a padded scheme: the patch number is multiplied by 100, and the current **updater version** is added (e.g. Radzen `9.2.4` becomes theming `9.2.400` with updater version 0). The last two digits of the patch therefore encode which version of the updater pipeline produced the package. The updater version is a constant (`VersionHelper.UpdaterVersion`) that is incremented whenever the packaging logic changes; running the `republish` command afterwards propagates the change to all existing versions.
+
+## Commands
+
+The program provides two commands:
+
+- **Default command** (no command name): creates releases for base package versions that are newer than the latest theming package version. This is what the daily CI run executes.
+- **`republish`**: rebuilds *existing* theming package versions with the current pipeline and updater version. Versions whose target tag already exists are skipped, making the command idempotent.
+
 ## Arguments and Configuration
 
 This section describes the arguments that can be provided to the program to modify its behavior at runtime, as well as the configuration entries that define its default behavior. Configuration entries are typically set in `appsettings.json` (except for sensitive values like the GitHub token and NuGet API key, which should be provided via `secrets.json` or environment variables). Configuration entries are grouped into categories, and the table below reflects their structure.
 
 ### Arguments
 
-The following arguments can be passed to the program to override default behavior without modifying configuration files:
+The following arguments can be passed to the default command to override default behavior without modifying configuration files:
 
 | Argument               | Description                                                                        |
 |------------------------|------------------------------------------------------------------------------------|
@@ -20,6 +31,12 @@ The following arguments can be passed to the program to override default behavio
 | `--clean-github`       | Clean up the GitHub repository before the operation.                               |
 | `--clean-nuget`        | Clean up the latest NuGet package before the operation.                            |
 | `--clean-all`          | Clean up all staging files (default), GitHub repository, and latest NuGet package. |
+
+The `republish` command supports `--no-commit`, `--no-release`, `--pack`, and `--push` with the same meaning, plus:
+
+| Argument               | Description                                                                        |
+|------------------------|------------------------------------------------------------------------------------|
+| `--from <version>`     | Only republish base package versions at or above this version (e.g. `5.0.0`).      |
 
 #### Host Builder Arguments
 
@@ -124,6 +141,8 @@ The "Default/Example Value" column contains default values for optional entries 
 - **NuGet API Key**: Requires permissions to push new package versions, create new packages (if they don't already exist), and unlist package versions (if clean-up is used).
 
 ## Overview
+
+This section describes the default command; the `republish` command performs the same per-version steps, but iterates over the already published versions instead of new ones (see [Commands](#commands)).
 
 The program begins by retrieving the latest version of the main package (`Blazor.Radzen.Theming`) and all versions of the base package (`Radzen.Blazor`). For each version of the base package that is higher than the latest version of the main package, the program performs the following steps:
 

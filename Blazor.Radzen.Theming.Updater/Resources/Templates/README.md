@@ -5,6 +5,8 @@ Provides SCSS source files from the [**Radzen.Blazor**](https://www.nuget.org/pa
 [![License - MIT](https://img.shields.io/github/license/cytoph/blazor-radzen-theming?logo=github&style=for-the-badge)](https://github.com/cytoph/blazor-radzen-theming/blob/master/LICENSE)
 [![NuGet Version](https://img.shields.io/nuget/v/Blazor.Radzen.Theming?logo=nuget&style=for-the-badge)](https://www.nuget.org/packages/Blazor.Radzen.Theming/)
 
+> **Note: The versioning scheme has changed.** Package versions no longer mirror the **Radzen.Blazor** version exactly: the patch number is now padded by a factor of 100, so e.g. **Radzen.Blazor** `9.2.4` corresponds to version `9.2.400` of this package. The last two digits are reserved for a revision counter that allows publishing fixes to this package itself without waiting for a new **Radzen.Blazor** release. All previously published versions have been republished under their padded version numbers; the old, unpadded versions are unlisted.
+
 ## About
 
 This package contains the complete collection of SCSS source files from the **Radzen.Blazor** components library, making them available for custom theme development. Instead of being limited to Radzen's pre-built themes, you can now access the original component stylesheets and create entirely custom themes tailored to your application's design requirements.
