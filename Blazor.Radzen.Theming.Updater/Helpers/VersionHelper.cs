@@ -25,7 +25,7 @@ internal static class VersionHelper
     /// The current updater pipeline version. Encoded in the last two digits of the patch number.
     /// Increment when the packaging logic changes and a republish is needed.
     /// </summary>
-    public const int UpdaterVersion = 1;
+    public const int UpdaterVersion = 0;
 
     /// <summary>
     /// Converts a base package version to the corresponding padded theming package version,
