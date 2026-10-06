@@ -36,4 +36,5 @@ jobs:
         $extraArgs = "${{ github.event.inputs.parameters }}"
         $args = "" # create-release is the default command
         if ($extraArgs) { $args += " $extraArgs" }
-        dotnet run --no-launch-profile --configuration Release -- $args
+        $cmd = "dotnet run --no-launch-profile --configuration Release -- $args"
+        Invoke-Expression $cmd

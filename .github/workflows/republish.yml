@@ -39,4 +39,5 @@ jobs:
         $args = "republish"
         if ($fromArg) { $args += " --from $fromArg" }
         if ($extraArgs) { $args += " $extraArgs" }
-        dotnet run --no-launch-profile --configuration Release -- $args
+        $cmd = "dotnet run --no-launch-profile --configuration Release -- $args"
+        Invoke-Expression $cmd
