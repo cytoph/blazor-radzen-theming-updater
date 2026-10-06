@@ -4,7 +4,7 @@ A program that updates the [**Blazor.Radzen.Theming**](https://github.com/cytoph
 
 ## Versioning
 
-The theming package's version is derived from the base package (Radzen) version using a padded scheme: the patch number is multiplied by 100, and the current **updater version** is added (e.g. Radzen `9.2.4` becomes theming `9.2.400` with updater version 0). The last two digits of the patch therefore encode which version of the updater pipeline produced the package. The updater version is a constant (`VersionHelper.UpdaterVersion`) that is incremented whenever the packaging logic changes; running the `republish` command afterwards propagates the change to all existing versions.
+The theming package's version is derived from the base package (Radzen) version using a padded scheme: the patch number plus one is multiplied by 100, and the current **updater version** is added (e.g. Radzen `9.2.4` becomes theming `9.2.500` with updater version 0). The last two digits of the patch therefore encode which version of the updater pipeline produced the package. The offset of one keeps patch `0` from mapping to itself: NuGet normalizes leading zeros away, so `5.0.000` and `5.0.001` would collide with the existing unpadded versions `5.0.0` and `5.0.1`. The updater version is a constant (`VersionHelper.UpdaterVersion`) that is incremented whenever the packaging logic changes; running the `republish` command afterwards propagates the change to all existing versions.
 
 ## Commands
 

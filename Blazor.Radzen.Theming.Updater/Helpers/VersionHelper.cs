@@ -7,9 +7,12 @@ namespace Blazor.Radzen.Theming.Updater.Helpers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The theming package uses a padded versioning scheme: the base package's patch number is multiplied
-/// by <see cref="PaddingFactor"/>, and the current <see cref="UpdaterVersion"/> is added. For example,
-/// with UpdaterVersion 1: Radzen 9.2.4 becomes theming 9.2.401.
+/// The theming package uses a padded versioning scheme: the base package's patch number plus one is
+/// multiplied by <see cref="PaddingFactor"/>, and the current <see cref="UpdaterVersion"/> is added.
+/// For example, with UpdaterVersion 1: Radzen 9.2.4 becomes theming 9.2.501. The offset of one keeps
+/// patch 0 from mapping to itself (5.0.0 must not become 5.0.0 again), which matters because NuGet
+/// normalizes leading zeros away, so 5.0.000 and 5.0.001 would collide with the existing unpadded
+/// versions 5.0.0 and 5.0.1.
 /// </para>
 /// <para>
 /// The last two digits encode which version of the updater pipeline produced the package. Bump
@@ -32,18 +35,18 @@ internal static class VersionHelper
     /// incorporating the current <see cref="UpdaterVersion"/>.
     /// </summary>
     /// <param name="baseVersion">The base package (Radzen) version.</param>
-    /// <returns>The padded theming package version (e.g. 9.2.4 → 9.2.401 with UpdaterVersion 1).</returns>
+    /// <returns>The padded theming package version (e.g. 9.2.4 → 9.2.501 with UpdaterVersion 1).</returns>
     public static SemanticVersion ToPackageVersion(SemanticVersion baseVersion)
-        => new(baseVersion.Major, baseVersion.Minor, baseVersion.Patch * PaddingFactor + UpdaterVersion);
+        => new(baseVersion.Major, baseVersion.Minor, (baseVersion.Patch + 1) * PaddingFactor + UpdaterVersion);
 
     /// <summary>
     /// Converts a padded theming package version back to the base package version it tracks.
     /// The updater version (last two digits) is stripped by integer division.
     /// </summary>
     /// <param name="packageVersion">The padded theming package version.</param>
-    /// <returns>The base package (Radzen) version (e.g. 9.2.401 → 9.2.4).</returns>
+    /// <returns>The base package (Radzen) version (e.g. 9.2.501 → 9.2.4).</returns>
     public static SemanticVersion ToBaseVersion(SemanticVersion packageVersion)
-        => new(packageVersion.Major, packageVersion.Minor, packageVersion.Patch / PaddingFactor);
+        => new(packageVersion.Major, packageVersion.Minor, packageVersion.Patch / PaddingFactor - 1);
 
     /// <summary>
     /// Returns whether a version uses the old (unpadded) format, i.e. the patch number
