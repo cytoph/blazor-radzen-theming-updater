@@ -2,35 +2,38 @@ name: CI
 
 on:
   # Run daily at 2:00 AM UTC
-  schedule:    
+  schedule:
     - cron: '0 2 * * *'
-    
+
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
     inputs:
       parameters:
-        description: 'Additional parameters to pass to the application'
+        description: 'Additional parameters to pass to the application (e.g. --pack --push)'
         required: false
         default: ''
         type: string
 
 jobs:
-  run-application:
+  create-release:
     runs-on: windows-latest
-    
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v5
-      
+
     - name: Setup .NET
       uses: actions/setup-dotnet@v5
       with:
         dotnet-version: '9.0.x'
-        
-    - name: Run application
+
+    - name: Run create-release
       working-directory: .\Blazor.Radzen.Theming.Updater
       env:
         GITHUB__TOKEN: ${{ secrets.REPO_TOKEN }}
         NUGET__APIKEY: ${{ secrets.NUGET_API_KEY }}
-      run: dotnet run --no-launch-profile --configuration Release -- ${{ github.event.inputs.parameters || '' }}
-      
+      run: |
+        $extraArgs = "${{ github.event.inputs.parameters }}"
+        $args = "" # create-release is the default command
+        if ($extraArgs) { $args += " $extraArgs" }
+        dotnet run --no-launch-profile --configuration Release -- $args

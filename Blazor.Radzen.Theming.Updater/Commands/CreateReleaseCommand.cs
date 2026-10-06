@@ -3,7 +3,6 @@ using Blazor.Radzen.Theming.Updater.Interfaces;
 using Blazor.Radzen.Theming.Updater.Models;
 using Blazor.Radzen.Theming.Updater.Services;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NuGet.Frameworks;
@@ -153,10 +152,6 @@ internal sealed partial class CreateReleaseCommand : IDisposable
 
             long startTs = Stopwatch.GetTimestamp();
 
-            using IServiceScope scope = _serviceScopeFactory.CreateScope();
-
-            FileService iterationFileService = scope.ServiceProvider.GetRequiredService<FileService>();
-
             SemanticVersion paddedBaseVersion = VersionHelper.ToPackageVersion(basePackageVersion);
 
             SemanticVersion packageVersion = !string.IsNullOrEmpty(_packageManifest.PreReleaseIdentifier)
@@ -172,6 +167,10 @@ internal sealed partial class CreateReleaseCommand : IDisposable
                 LogTagAlreadyExists(existingTag);
                 return;
             }
+
+            using IServiceScope scope = _serviceScopeFactory.CreateScope();
+
+            FileService iterationFileService = scope.ServiceProvider.GetRequiredService<FileService>();
 
             (string? baseCommitId, NuGetFramework[] targetFrameworks) = await _nuGetApiService.GetPackageSpecificationData(_basePackageManifest.Id, basePackageVersion, cancellationToken);
 
@@ -265,6 +264,8 @@ internal sealed partial class CreateReleaseCommand : IDisposable
         {
             LogStagingFolderDeletionSkipped();
         }
+
+        LogCreateReleaseCompleted();
     }
 
     public void Dispose()

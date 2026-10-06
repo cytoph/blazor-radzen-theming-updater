@@ -86,4 +86,7 @@ partial class CreateReleaseCommand
     [LoggerMessage(Level = LogLevel.Debug, Message = "Staging folder deletion has been skipped.")]
     partial void LogStagingFolderDeletionSkipped();
 
+    [LoggerMessage(Level = LogLevel.Information, Message = "Create release completed.")]
+    partial void LogCreateReleaseCompleted();
+
 }
