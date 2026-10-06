@@ -1,5 +1,4 @@
 ﻿using Blazor.Radzen.Theming.Updater.Helpers;
-using Blazor.Radzen.Theming.Updater.Interfaces;
 using Blazor.Radzen.Theming.Updater.Models;
 using Blazor.Radzen.Theming.Updater.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,9 +10,9 @@ using System.Diagnostics;
 
 namespace Blazor.Radzen.Theming.Updater.Commands;
 
-internal sealed partial class CreateReleaseCommand : IDisposable
+internal sealed partial class RepublishCommand : IDisposable
 {
-    private readonly ILogger<CreateReleaseCommand> _logger;
+    private readonly ILogger<RepublishCommand> _logger;
     private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly GeneralOptions _generalOptions;
     private readonly StagingOptions _stagingOptions;
@@ -25,7 +24,7 @@ internal sealed partial class CreateReleaseCommand : IDisposable
     private readonly NuGetApiService _nuGetApiService;
     private readonly NuGetCliService _nuGetCliService;
 
-    public CreateReleaseCommand(ILogger<CreateReleaseCommand> logger,
+    public RepublishCommand(ILogger<RepublishCommand> logger,
         IServiceScopeFactory serviceScopeFactory,
         IOptions<PackageManifest> packageManifest,
         IOptions<BasePackageManifest> basePackageManifest,
@@ -49,34 +48,30 @@ internal sealed partial class CreateReleaseCommand : IDisposable
     }
 
     /// <summary>
-    /// Creates a release based on the base package version.
+    /// Republishes existing package versions using the current updater pipeline.
     /// </summary>
+    /// <remarks>
+    /// Iterates over all Radzen versions that have a corresponding theming package version,
+    /// builds each with the current pipeline (including <see cref="VersionHelper.UpdaterVersion"/>),
+    /// and publishes the result. Versions whose padded tag already exists are skipped, making
+    /// the command idempotent.
+    /// </remarks>
+    /// <param name="from">Only republish Radzen versions at or above this version (e.g. "5.0.0").</param>
     /// <param name="noCommit">Do not create a commit and release on GitHub.</param>
     /// <param name="noRelease">Do not create a release on GitHub.</param>
-    ///
     /// <param name="pack">Create a NuGet package.</param>
-    /// <param name="push">Push the package to package source.</param>
-    ///
-    /// <param name="noCleanFiles">Do not clean up staging files before the operation.</param>
-    /// <param name="cleanGithub">Clean up GitHub repository before the operation.</param>
-    /// <param name="cleanNuget">Clean up latest NuGet package before the operation.</param>
-    /// <param name="cleanAll">Clean up all staging files, GitHub repository, and latest NuGet package before the operation.</param>
-    /// <returns></returns>
-    [ConsoleAppFramework.Command("")]
+    /// <param name="push">Push the package to the package source.</param>
+    [ConsoleAppFramework.Command("republish")]
     public async Task ExecuteAsync(
+        string? from = null,
+
         bool noCommit = false,
         bool noRelease = false,
 
         bool pack = false,
         bool push = false,
 
-        bool noCleanFiles = false,
-        bool cleanGithub = false,
-        bool cleanNuget = false,
-        bool cleanAll = false,
-
-        CancellationToken cancellationToken = default
-    )
+        CancellationToken cancellationToken = default)
     {
         if (noCommit && push)
         {
@@ -84,69 +79,60 @@ internal sealed partial class CreateReleaseCommand : IDisposable
             return;
         }
 
-        LogPackageInfo(_packageManifest.Id, _packageManifest.RepositoryOwner, _packageManifest.RepositoryName);
-        LogBasePackageInfo(_basePackageManifest.Id, _basePackageManifest.RepositoryOwner, _basePackageManifest.RepositoryName);
+        LogRepublishStarted(VersionHelper.UpdaterVersion);
+
+        SemanticVersion? fromVersion = null;
+
+        if (!string.IsNullOrEmpty(from))
+        {
+            if (!SemanticVersion.TryParse(from, out fromVersion))
+            {
+                LogInvalidFromVersion(from);
+                return;
+            }
+
+            LogFilteringFromVersion(fromVersion);
+        }
 
         SemanticVersion[] packageVersions = await _nuGetApiService.GetPackageVersions(_packageManifest.Id, cancellationToken);
-        SemanticVersion latestPackageVersion = packageVersions.Max() ?? new(0, 0, 0);
 
-        LogLatestPackageVersion(latestPackageVersion);
-
-        SemanticVersion[] basePackageVersions = await _nuGetApiService.GetPackageVersions(_basePackageManifest.Id, cancellationToken);
-        SemanticVersion latestBaseVersion = VersionHelper.IsOldFormat(latestPackageVersion)
-            ? latestPackageVersion
-            : VersionHelper.ToBaseVersion(latestPackageVersion);
-        SemanticVersion[] higherBasePackageVersions = [.. basePackageVersions.Where(v => v > latestBaseVersion).Order()];
-
-        if (higherBasePackageVersions.Length == 0)
+        if (packageVersions.Length == 0)
         {
-            LogNoHigherBasePackageVersion();
+            LogNoExistingVersions();
             return;
         }
 
-        LogHigherBasePackageVersions(higherBasePackageVersions.Length);
+        LogExistingVersionsFound(packageVersions.Length);
 
-        if (_generalOptions.VersionCreationLimit > 0 && higherBasePackageVersions.Length > _generalOptions.VersionCreationLimit)
+        SemanticVersion[] basePackageVersions = await _nuGetApiService.GetPackageVersions(_basePackageManifest.Id, cancellationToken);
+
+        SemanticVersion[] coveredBaseVersions = [.. packageVersions
+            .Select(v => VersionHelper.IsOldFormat(v) ? v : VersionHelper.ToBaseVersion(v))
+            .Distinct()
+            .Where(v => basePackageVersions.Contains(v))
+            .Order()];
+
+        if (fromVersion is not null)
         {
-            higherBasePackageVersions = [.. higherBasePackageVersions.Take(_generalOptions.VersionCreationLimit)];
-
-            LogLimitingVersionCreation(higherBasePackageVersions.Length);
+            coveredBaseVersions = [.. coveredBaseVersions.Where(v => v >= fromVersion)];
         }
 
-        if (cleanAll || !noCleanFiles || cleanGithub || cleanNuget)
+        if (coveredBaseVersions.Length == 0)
         {
-            List<(ICleanUpService Service, Action LogSuccess)> cleanUps = [];
-
-            if (cleanAll || !noCleanFiles)
-            {
-                cleanUps.Add((_fileService, LogStagingFolderDeleted));
-            }
-
-            if (cleanAll || cleanGithub)
-            {
-                cleanUps.Add((_gitHubApiService, LogGitHubBranchAndReleasesDeleted));
-            }
-
-            if (cleanAll || cleanNuget)
-            {
-                cleanUps.Add((_nuGetCliService, LogNuGetPackageDeleted));
-            }
-
-            foreach ((ICleanUpService service, Action logSuccess) in cleanUps)
-            {
-                bool result = await service.CleanUpAsync(latestPackageVersion, cancellationToken);
-
-                if (!result)
-                {
-                    LogCleanupOperationFailed();
-                    return;
-                }
-
-                logSuccess();
-            }
+            LogNoVersionsToRepublish();
+            return;
         }
 
-        foreach (SemanticVersion basePackageVersion in higherBasePackageVersions)
+        LogVersionsToRepublish(coveredBaseVersions.Length);
+
+        if (_generalOptions.VersionCreationLimit > 0 && coveredBaseVersions.Length > _generalOptions.VersionCreationLimit)
+        {
+            coveredBaseVersions = [.. coveredBaseVersions.Take(_generalOptions.VersionCreationLimit)];
+
+            LogLimitingVersionCreation(coveredBaseVersions.Length);
+        }
+
+        foreach (SemanticVersion basePackageVersion in coveredBaseVersions)
         {
             LogPackageCreationStarted(basePackageVersion);
 
@@ -165,7 +151,7 @@ internal sealed partial class CreateReleaseCommand : IDisposable
             if (!string.IsNullOrEmpty(existingTag))
             {
                 LogTagAlreadyExists(existingTag);
-                return;
+                continue;
             }
 
             using IServiceScope scope = _serviceScopeFactory.CreateScope();
@@ -265,7 +251,7 @@ internal sealed partial class CreateReleaseCommand : IDisposable
             LogStagingFolderDeletionSkipped();
         }
 
-        LogCreateReleaseCompleted();
+        LogRepublishCompleted();
     }
 
     public void Dispose()
