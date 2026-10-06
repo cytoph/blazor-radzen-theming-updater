@@ -1,0 +1,42 @@
+name: Republish
+
+on:
+  # Manual trigger only - republishes existing versions with the current pipeline
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Only republish Radzen versions at or above this version (e.g. 5.0.0). Leave empty to republish all.'
+        required: false
+        default: ''
+        type: string
+      parameters:
+        description: 'Additional parameters to pass to the application (e.g. --pack --push)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  republish:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v5
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v5
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Run republish
+      working-directory: .\Blazor.Radzen.Theming.Updater
+      env:
+        GITHUB__TOKEN: ${{ secrets.REPO_TOKEN }}
+        NUGET__APIKEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        $fromArg = "${{ github.event.inputs.from }}"
+        $extraArgs = "${{ github.event.inputs.parameters }}"
+        $args = "republish"
+        if ($fromArg) { $args += " --from $fromArg" }
+        if ($extraArgs) { $args += " $extraArgs" }
+        dotnet run --no-launch-profile --configuration Release -- $args

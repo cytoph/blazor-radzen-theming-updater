@@ -63,6 +63,7 @@ try
     var app = builder.ToConsoleAppBuilder();
 
     app.Add<CreateReleaseCommand>();
+    app.Add<RepublishCommand>();
 
     await app.RunAsync(commandArgs);
 }
