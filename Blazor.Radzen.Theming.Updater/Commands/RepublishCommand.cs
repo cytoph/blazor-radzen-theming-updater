@@ -211,9 +211,9 @@ internal sealed partial class RepublishCommand : IDisposable
 
             if (pack || push)
             {
-                commitId ??= "1234567"; // dummy commit ID for when no commit has been created
+                commitId ??= new string('0', 40); // git's null SHA as dummy for when no commit has been created
 
-                string? packageFilePath = await _nuGetCliService.CreatePackageAsync(stagingFolder, packageVersion, commitId[7..], cancellationToken);
+                string? packageFilePath = await _nuGetCliService.CreatePackageAsync(stagingFolder, packageVersion, commitId, cancellationToken);
 
                 if (packageFilePath == null)
                 {
