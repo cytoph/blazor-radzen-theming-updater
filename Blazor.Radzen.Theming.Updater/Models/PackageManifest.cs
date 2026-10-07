@@ -25,9 +25,17 @@ internal sealed class PackageManifest
     public required string RepositoryName { get; set; }
 
     /// <summary>
-    /// The branch to use for commits and releases.
+    /// The branch containing only the repository scaffold (e.g. the CI workflow). Missing target
+    /// branches are created from its head.
     /// </summary>
-    public required string RepositoryBranchName { get; set; }
+    public required string ScaffoldBranchName { get; set; }
+
+    /// <summary>
+    /// The branch receiving the commits and releases. Defaults to the current updater revision's
+    /// branch (e.g. "rev-0" for <see cref="VersionHelper.UpdaterVersion"/> 0), so bumping the
+    /// updater version automatically targets a fresh branch.
+    /// </summary>
+    public string TargetBranchName { get; set; } = $"rev-{VersionHelper.UpdaterVersion}";
 
     /// <summary>
     /// Optional pre-release identifier for versioning. Gets suffixed with a dot and a Unix timestamp when used.
@@ -40,7 +48,12 @@ internal sealed class PackageManifest
     public string RepositoryAddress => GitHelpers.GetGitHubAddress(RepositoryOwner, RepositoryName);
 
     /// <summary>
-    /// The branch reference used for Git operations.
+    /// The scaffold branch reference used for Git operations.
     /// </summary>
-    public string RepositoryBranchReference => GitHelpers.GetBranchReference(RepositoryBranchName);
+    public string ScaffoldBranchReference => GitHelpers.GetBranchReference(ScaffoldBranchName);
+
+    /// <summary>
+    /// The target branch reference used for Git operations.
+    /// </summary>
+    public string TargetBranchReference => GitHelpers.GetBranchReference(TargetBranchName);
 }

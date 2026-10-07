@@ -22,8 +22,8 @@ partial class GitHubApiService
     [LoggerMessage(Level = LogLevel.Trace, Message = "Creating release on GitHub with tag \"{TagName}\" and name \"{ReleaseName}\".")]
     partial void LogCreatingRelease(string tagName, string releaseName);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Will not delete branch {BranchName} as it is the main branch of the repository!")]
-    partial void LogWillNotDeleteMainBranch(string branchName);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Will not delete branch {BranchName} as it is the scaffold branch of the repository!")]
+    partial void LogWillNotDeleteScaffoldBranch(string branchName);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Deleting branch and associated releases for branch \"{BranchName}\".")]
     partial void LogDeletingBranchAndReleases(string branchName);

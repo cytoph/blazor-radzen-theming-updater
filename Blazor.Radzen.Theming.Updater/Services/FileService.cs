@@ -184,7 +184,7 @@ internal sealed partial class FileService : ICleanUpService
             { "$version$", packageVersion.ToNormalizedString() },
             { "$authors$", _generalOptions.Authors },
             { "$gitHubAddress$", _packageManifest.RepositoryAddress },
-            { "$branch$", _packageManifest.RepositoryBranchName },
+            { "$branch$", _packageManifest.TargetBranchName },
         };
 
         fileContent = fileContent.ReplaceTokens(replacementTokens);

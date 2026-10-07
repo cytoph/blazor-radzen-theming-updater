@@ -69,7 +69,7 @@ This feature follows the same pattern as the `dotnet run` command, where `dotnet
 #### Clean-Up Details
 
 - **Files**: Deletes the staging folder to ensure no leftover files from previous runs. This is done by default for safety reasons but can be disabled using the `--no-clean-files` argument.
-- **GitHub**: Deletes branches and associated releases from the GitHub repository, except for branches named `main` or `master`. If one attempts to clean a `main` or `master` branch, the program is aborted.
+- **GitHub**: Deletes branches and associated releases from the GitHub repository, except for the scaffold branch. If one attempts to clean that, the program is aborted.
 - **NuGet**: Deletes or unlists prerelease packages from the NuGet source. Non-prerelease packages are never deleted. If one attempts to delete a non-prerelease package, the program is aborted.
 
 ### Configuration Entries
@@ -78,21 +78,22 @@ The "Default/Example Value" column contains default values for optional entries 
 
 #### General
 
-| Key                | Description                                                                                     | Optional | Default/Example Value |
-|--------------------|-------------------------------------------------------------------------------------------------|----------|-----------------------|
-| `StartYear`        | Used in conjunction with the current year to determine the validity period for the license.     | No       | `2023`                |
-| `Authors`          | The authors of the package, used in license and metadata generation.                            | No       | `cytoph`              |
+| Key                    | Description                                                                                 | Optional | Default/Example Value |
+|------------------------|---------------------------------------------------------------------------------------------|----------|-----------------------|
+| `StartYear`            | Used in conjunction with the current year to determine the validity period for the license. | No       | `2023`                |
+| `Authors`              | The authors of the package, used in license and metadata generation.                        | No       | `cytoph`              |
 | `VersionCreationLimit` | Maximum number of versions to create in one execution.                                      | Yes      | `0` (unlimited)       |
 
 #### Package
 
-| Key                     | Description                                                                                    | Optional | Default/Example Value   |
-|-------------------------|------------------------------------------------------------------------------------------------|----------|-------------------------|
-| `Id`                    | The NuGet package ID.                                                                          | No       | `Blazor.Radzen.Theming` |
-| `RepositoryOwner`       | The owner of the package's GitHub repository.                                                  | No       | `cytoph`                |
-| `RepositoryName`        | The name of the package's GitHub repository.                                                   | No       | `blazor-radzen-theming` |
-| `RepositoryBranchName`  | The branch to use for commits and releases.                                                    | No       | `main`                  |
-| `PreReleaseIdentifier`  | Optional pre-release identifier for versioning. Gets suffixed with a dot and a Unix timestamp. | Yes      | `beta`                  |
+| Key                     | Description																							   | Optional | Default/Example Value   |
+|-------------------------|--------------------------------------------------------------------------------------------------------|----------|-------------------------|
+| `Id`                    | The NuGet package ID.																				   | No       | `Blazor.Radzen.Theming` |
+| `RepositoryOwner`       | The owner of the package's GitHub repository.														   | No       | `cytoph`                |
+| `RepositoryName`        | The name of the package's GitHub repository.														   | No       | `blazor-radzen-theming` |
+| `ScaffoldBranchName`    | The branch containing only the repository scaffold; missing target branches are created from its head. | No       | `scaffold`              |
+| `TargetBranchName`      | The branch receiving the commits and releases. Defaults to the current updater revision's branch.      | Yes      | `rev-<UpdaterVersion>`  |
+| `PreReleaseIdentifier`  | Optional pre-release identifier for versioning. Gets suffixed with a dot and a Unix timestamp.         | Yes      | `beta`                  |
 
 #### Base Package
 
@@ -197,7 +198,7 @@ The templates and configuration entries support placeholders that are replaced d
   - `$version$`: Replaced with the package version.
   - `$authors$`: Replaced with the authors. (`General:Authors`)
   - `$gitHubAddress$`: Replaced with the GitHub repository URL. (`Package:RepositoryOwner` and `Package:RepositoryName`)
-  - `$branch$`: Replaced with the branch name. (`Package:RepositoryBranchName`)
+  - `$branch$`: Replaced with the branch name. (`Package:TargetBranchName`)
   - `$commitId$`: Replaced with the commit ID, but **only** in the NuGet packaging process.
 
 - **`build.props`**:

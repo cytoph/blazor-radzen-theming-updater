@@ -12,7 +12,6 @@ namespace Blazor.Radzen.Theming.Updater.Services;
 internal sealed partial class GitHubApiService : ICleanUpService
 {
     private static readonly TimeSpan CacheExpiration = TimeSpan.FromHours(1);
-    private static readonly string[] MainBranchNames = ["main", "master"];
 
     private readonly ILogger<GitHubApiService> _logger;
     private readonly GitHubOptions _options;
@@ -64,31 +63,28 @@ internal sealed partial class GitHubApiService : ICleanUpService
     }
 
     /// <summary>
-    /// Ensures that the specified branch exists in the repository. If the branch does not exist, it is created based on the main branch.
+    /// Ensures that the specified branch exists in the repository. If the branch does not exist, it is created from the scaffold branch.
     /// </summary>
     /// <remarks>
-    /// This method checks if the branch specified in the repository manifest exists. If the branch is not found and the repository contains a recognized main
-    /// branch, a new branch is created from the main branch. The operation assumes that main branches (e.g., "main", "master") always exist.
+    /// This method checks if the branch specified in the repository manifest exists. If the branch is not found, a new branch is created from the head of the
+    /// scaffold branch, so every target branch starts from the bare repository scaffold (e.g. the CI workflow) instead of a previous revision's history.
+    /// The scaffold branch itself must exist; the method fails otherwise rather than falling back to any other branch.
     /// </remarks>
+    /// <exception cref="InvalidOperationException">The scaffold branch does not exist in the repository.</exception>
     public async Task EnsureBranchExists()
     {
-        if (MainBranchNames.Contains(_packageManifest.RepositoryBranchName)) // we just assume main branches exist
-        {
-            return;
-        }
-
         IReadOnlyList<Reference> branches = await _client.Git.Reference.GetAllForSubNamespace(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, GitHelpers.BranchesCategory);
 
-        if (branches.Any(r => r.Ref == _packageManifest.RepositoryBranchReference)) // if branch already exists, do nothing
+        if (branches.Any(r => r.Ref == _packageManifest.TargetBranchReference)) // if branch already exists, do nothing
         {
             return;
         }
 
-        Reference mainBranch = branches.First(r => MainBranchNames.Any(b => r.Ref == GitHelpers.GetBranchReference(b)));
-        string mainBranchName = GitHelpers.GetBranchName(mainBranch.Ref);
+        Reference scaffoldBranch = branches.FirstOrDefault(r => r.Ref == _packageManifest.ScaffoldBranchReference)
+            ?? throw new InvalidOperationException($"Scaffold branch \"{_packageManifest.ScaffoldBranchName}\" does not exist in the repository; it is required to create branch \"{_packageManifest.TargetBranchName}\".");
 
-        LogCreatingNewBranch(_packageManifest.RepositoryBranchName, mainBranchName);
-        await _client.Git.Reference.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, new NewReference(_packageManifest.RepositoryBranchReference, mainBranch.Object.Sha));
+        LogCreatingNewBranch(_packageManifest.TargetBranchName, _packageManifest.ScaffoldBranchName);
+        await _client.Git.Reference.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, new NewReference(_packageManifest.TargetBranchReference, scaffoldBranch.Object.Sha));
     }
 
     /// <summary>
@@ -196,7 +192,7 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <returns>The SHA identifier of the newly created commit.</returns>
     public async Task<string> CreateCommit(string stagingFolder, string commitMessage)
     {
-        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.RepositoryBranchReference);
+        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.TargetBranchReference);
 
         Commit currentCommit = await _client.Git.Commit.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, branchReference.Object.Sha);
         TreeResponse currentTree = await _client.Git.Tree.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, currentCommit.Tree.Sha);
@@ -239,7 +235,7 @@ internal sealed partial class GitHubApiService : ICleanUpService
             });
         }
 
-        LogCreatingCommit(newTree.Tree.Count, _packageManifest.RepositoryBranchName, commitMessage);
+        LogCreatingCommit(newTree.Tree.Count, _packageManifest.TargetBranchName, commitMessage);
 
         TreeResponse tree = await _client.Git.Tree.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newTree);
 
@@ -247,7 +243,7 @@ internal sealed partial class GitHubApiService : ICleanUpService
 
         Commit commit = await _client.Git.Commit.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newCommit);
 
-        await _client.Git.Reference.Update(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.RepositoryBranchReference, new ReferenceUpdate(commit.Sha));
+        await _client.Git.Reference.Update(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.TargetBranchReference, new ReferenceUpdate(commit.Sha));
 
         return commit.Sha;
     }
@@ -310,7 +306,7 @@ internal sealed partial class GitHubApiService : ICleanUpService
 
         await _client.Repository.Release.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, new NewRelease(tagName)
         {
-            TargetCommitish = _packageManifest.RepositoryBranchReference,
+            TargetCommitish = _packageManifest.TargetBranchReference,
             Name = releaseName,
             Body = releaseNotes,
             Prerelease = packageVersion.IsPrerelease,
@@ -322,28 +318,28 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// </summary>
     /// <remarks>
     /// This method deletes the branch specified in the package manifest, along with any tags and releases associated with commits in the branch. If the
-    /// branch is one of the main branches ("main" or "master"), the operation is not performed, and the method returns <see langword="false"/>.
+    /// branch is the scaffold branch, the operation is not performed, and the method returns <see langword="false"/>.
     /// </remarks>
     /// <returns>
     /// <see langword="true"/> if the branch and its associated tags and releases were successfully deleted; otherwise, <see langword="false"/>
-    /// if the operation was skipped due to the branch being a main branch.
+    /// if the operation was skipped due to the branch being the scaffold branch.
     /// </returns>
     public async Task<bool> DeleteBranchAndReleasesAsync()
     {
-        if (MainBranchNames.Contains(_packageManifest.RepositoryBranchName))
+        if (_packageManifest.TargetBranchName == _packageManifest.ScaffoldBranchName)
         {
-            LogWillNotDeleteMainBranch(_packageManifest.RepositoryBranchName);
+            LogWillNotDeleteScaffoldBranch(_packageManifest.TargetBranchName);
             return false;
         }
 
-        LogDeletingBranchAndReleases(_packageManifest.RepositoryBranchName);
+        LogDeletingBranchAndReleases(_packageManifest.TargetBranchName);
 
         IReadOnlyList<Reference> references = await _client.Git.Reference.GetAll(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName);
         IReadOnlyList<Reference> branches = [.. references.Where(r => GitHelpers.IsBranchReference(r.Ref))];
         IReadOnlyList<Reference> tags = [.. references.Where(r => GitHelpers.IsTagReference(r.Ref))];
         IReadOnlyList<Release> releases = await _client.Repository.Release.GetAll(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName);
 
-        if (branches.FirstOrDefault(r => r.Ref == _packageManifest.RepositoryBranchReference) is { } otherBranch)
+        if (branches.FirstOrDefault(r => r.Ref == _packageManifest.TargetBranchReference) is { } otherBranch)
         {
             CommitRequest commitRequest = new() { Sha = otherBranch.Object.Sha };
             IReadOnlyList<GitHubCommit> commits = await _client.Repository.Commit.GetAll(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, commitRequest);

@@ -189,7 +189,7 @@ internal sealed partial class RepublishCommand : IDisposable
 
                 commitId = await _gitHubApiService.CreateCommit(stagingFolder, commitMessage);
 
-                LogFilesCommitted(_packageManifest.RepositoryBranchName, commitId[..7]);
+                LogFilesCommitted(_packageManifest.TargetBranchName, commitId[..7]);
 
                 if (!noRelease)
                 {
