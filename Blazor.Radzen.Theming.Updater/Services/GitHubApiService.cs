@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NuGet.Versioning;
 using Octokit;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Blazor.Radzen.Theming.Updater.Services;
 
@@ -21,6 +22,11 @@ internal sealed partial class GitHubApiService : ICleanUpService
 
     private (DateTimeOffset CreatedAt, IReadOnlyList<Release> Releases)? _basePackageReleasesCache;
     private (DateTimeOffset CreatedAt, IReadOnlyList<Reference> Tags)? _basePackageTagsCache;
+
+    private HashSet<string>? _packageTagNames;
+    private bool _targetBranchEnsured;
+    private (string CommitSha, string TreeSha)? _targetBranchHead;
+    private readonly HashSet<string> _knownBlobShas = new(StringComparer.OrdinalIgnoreCase);
 
     public GitHubApiService(ILogger<GitHubApiService> logger,
         IHostEnvironment environment,
@@ -40,26 +46,31 @@ internal sealed partial class GitHubApiService : ICleanUpService
     }
 
     /// <summary>
-    /// Checks if a Git tag corresponding to the specified package version exists in the package repository.
+    /// Checks if the specified Git tag exists in the package repository.
     /// </summary>
     /// <remarks>
-    /// This method queries the repository for all tags under the "refs/tags/" namespace and checks for a match with the tag corresponding to the specified
-    /// package version. The comparison is case-insensitive.
+    /// The names of all tags under the "refs/tags/" namespace are fetched from the repository once and then kept for the lifetime of the service; tags
+    /// created or deleted by this service afterwards are applied to that list. The comparison is case-insensitive.
     /// </remarks>
-    /// <param name="packageVersion">The semantic version of the package to check for a corresponding Git tag.</param>
-    /// <returns>The name of the Git tag if it exists; otherwise, <see langword="null"/>.</returns>
-    public async Task<string?> PackageTagExists(SemanticVersion packageVersion)
+    /// <param name="tagName">The name of the Git tag to check for (e.g. "v1.2.3").</param>
+    /// <returns><see langword="true"/> if the Git tag exists; otherwise, <see langword="false"/>.</returns>
+    [MemberNotNull(nameof(_packageTagNames))]
+    public async Task<bool> PackageTagExists(string tagName)
     {
-        string tagReference = GitHelpers.GetTagReference(packageVersion);
+        LogCheckingTagExists(tagName);
 
-        LogCheckingTagExists(tagReference);
+        if (_packageTagNames is null)
+        {
+            // The compiler treats every await as a point where the method returns to its caller, so it cannot see that the
+            // [MemberNotNull] postcondition is met once the returned task has completed - which is what all callers await.
+#pragma warning disable CS8774
+            IReadOnlyList<Reference> references = await _client.Git.Reference.GetAllForSubNamespace(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, GitHelpers.TagsCategory);
+#pragma warning restore CS8774
 
-        IReadOnlyList<Reference> references = await _client.Git.Reference.GetAllForSubNamespace(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, GitHelpers.TagsCategory);
+            _packageTagNames = new(references.Select(r => GitHelpers.GetTagName(r.Ref)), StringComparer.OrdinalIgnoreCase);
+        }
 
-        return references.Select(r => r.Ref)
-            .Where(r => string.Equals(r, tagReference, StringComparison.OrdinalIgnoreCase))
-            .Select(GitHelpers.GetTagName)
-            .FirstOrDefault();
+        return _packageTagNames.Contains(tagName);
     }
 
     /// <summary>
@@ -68,10 +79,23 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <remarks>
     /// This method checks if the branch specified in the repository manifest exists. If the branch is not found, a new branch is created from the head of the
     /// scaffold branch, so every target branch starts from the bare repository scaffold (e.g. the CI workflow) instead of a previous revision's history.
-    /// The scaffold branch itself must exist; the method fails otherwise rather than falling back to any other branch.
+    /// The scaffold branch itself must exist; the method fails otherwise rather than falling back to any other branch. The check is only performed once
+    /// for the lifetime of the service.
     /// </remarks>
     /// <exception cref="InvalidOperationException">The scaffold branch does not exist in the repository.</exception>
     public async Task EnsureBranchExists()
+    {
+        if (_targetBranchEnsured)
+        {
+            return;
+        }
+
+        await InternalEnsureBranchExists();
+
+        _targetBranchEnsured = true;
+    }
+
+    private async Task InternalEnsureBranchExists()
     {
         IReadOnlyList<Reference> branches = await _client.Git.Reference.GetAllForSubNamespace(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, GitHelpers.BranchesCategory);
 
@@ -88,18 +112,60 @@ internal sealed partial class GitHubApiService : ICleanUpService
     }
 
     /// <summary>
-    /// Retrieves the contents of a specified folder in the base package repository at a given reference.
+    /// Retrieves the contents of a specified folder and all its subfolders in the base package repository at a given reference.
     /// </summary>
+    /// <remarks>
+    /// The whole folder is listed with a single recursive tree request. The download URLs point to the raw content host, which does not count against
+    /// the GitHub API rate limit. If GitHub truncates the recursive listing, the folder is listed directory by directory instead, which costs one request
+    /// per directory.
+    /// </remarks>
     /// <param name="repositoryFolderPath">The path to the folder within the repository whose contents are to be retrieved.</param>
     /// <param name="reference">The Git reference (e.g., commit ID, or tag) to use when fetching the folder contents.</param>
-    /// <returns>An array of <see cref="GitContent"/> objects representing the contents of the specified folder.</returns>
+    /// <returns>
+    /// An array of <see cref="GitContent"/> objects representing the contents of the specified folder and its subfolders, with paths relative to the
+    /// repository root.
+    /// </returns>
     public async Task<GitContent[]> GetBasePackageRepositoryContentsAsync(string repositoryFolderPath, string reference)
     {
         LogFetchingRepositoryContents(repositoryFolderPath, reference);
 
+        TreeResponse tree = await _client.Git.Tree.GetRecursive(_basePackageManifest.RepositoryOwner, _basePackageManifest.RepositoryName, $"{reference}:{repositoryFolderPath}");
+
+        if (tree.Truncated)
+        {
+            LogRepositoryTreeTruncated(repositoryFolderPath, reference);
+
+            return await GetBasePackageRepositoryContentsByDirectoryAsync(repositoryFolderPath, reference);
+        }
+
+        return [.. tree.Tree.Select(t =>
+        {
+            string path = $"{repositoryFolderPath}/{t.Path}";
+
+            GitContentType type = t.Type.Value switch
+            {
+                TreeType.Blob when t.Mode != Octokit.FileMode.Symlink => GitContentType.File,
+                TreeType.Tree => GitContentType.Directory,
+                _ => GitContentType.Other
+            };
+
+            return new GitContent()
+            {
+                Name = t.Path[(t.Path.LastIndexOf('/') + 1)..],
+                Path = path,
+                DownloadUrl = type == GitContentType.File
+                    ? GitHelpers.GetRawContentAddress(_basePackageManifest.RepositoryOwner, _basePackageManifest.RepositoryName, reference, path)
+                    : null,
+                Type = type,
+            };
+        })];
+    }
+
+    private async Task<GitContent[]> GetBasePackageRepositoryContentsByDirectoryAsync(string repositoryFolderPath, string reference)
+    {
         IReadOnlyList<RepositoryContent> contents = await _client.Repository.Content.GetAllContentsByRef(_basePackageManifest.RepositoryOwner, _basePackageManifest.RepositoryName, repositoryFolderPath, reference);
 
-        return [..contents.Select(c => new GitContent()
+        GitContent[] folderContents = [.. contents.Select(c => new GitContent()
         {
             Name = c.Name,
             Path = c.Path,
@@ -111,6 +177,15 @@ internal sealed partial class GitHubApiService : ICleanUpService
                 _ => GitContentType.Other
             }
         })];
+
+        List<GitContent> allContents = [.. folderContents];
+
+        foreach (GitContent directory in folderContents.Where(c => c.Type == GitContentType.Directory))
+        {
+            allContents.AddRange(await GetBasePackageRepositoryContentsByDirectoryAsync(directory.Path, reference));
+        }
+
+        return [.. allContents];
     }
 
     /// <summary>
@@ -182,6 +257,11 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <remarks>
     /// This method stages all files in the specified <paramref name="stagingFolder"/> and creates a commit in the repository branch defined by the current
     /// package manifest. After creation, the branch reference is updated to point to the new commit's ID (aka. pushing the commit).
+    /// <para>
+    /// Only files whose content is not yet stored in the repository are uploaded as new blobs; all others reference the existing blob by its object ID,
+    /// which is computed locally. The branch head is fetched once and then tracked from the commits created by this service. The branch reference is
+    /// updated without force, so the update fails instead of overwriting commits that were pushed to the branch by anyone else in the meantime.
+    /// </para>
     /// </remarks>
     /// <param name="stagingFolder">
     /// The path to the folder containing the files to be included in the commit. All files in this folder and its subdirectories will be added to the commit.
@@ -192,16 +272,24 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <returns>The SHA identifier of the newly created commit.</returns>
     public async Task<string> CreateCommit(string stagingFolder, string commitMessage)
     {
-        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.TargetBranchReference);
+        (string parentCommitSha, string currentTreeSha) = _targetBranchHead ??= await GetTargetBranchHead();
 
-        Commit currentCommit = await _client.Git.Commit.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, branchReference.Object.Sha);
-        TreeResponse currentTree = await _client.Git.Tree.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, currentCommit.Tree.Sha);
+        TreeResponse currentTree = await _client.Git.Tree.GetRecursive(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, currentTreeSha);
+
+        if (currentTree.Truncated) // the recursive listing is incomplete, so fall back to the root items and upload every file
+        {
+            currentTree = await _client.Git.Tree.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, currentTreeSha);
+        }
+        else
+        {
+            _knownBlobShas.UnionWith(currentTree.Tree.Where(t => t.Type.Value == TreeType.Blob).Select(t => t.Sha));
+        }
 
         NewTree newTree = new();
 
         string[] newRootItems = [.. Directory.EnumerateFileSystemEntries(stagingFolder).Select(p => Path.GetRelativePath(stagingFolder, p))];
 
-        foreach (TreeItem item in currentTree.Tree.Where(t => !newRootItems.Contains(t.Path, StringComparer.OrdinalIgnoreCase)))
+        foreach (TreeItem item in currentTree.Tree.Where(t => !t.Path.Contains('/', StringComparison.Ordinal) && !newRootItems.Contains(t.Path, StringComparer.OrdinalIgnoreCase)))
         {
             newTree.Tree.Add(new()
             {
@@ -212,40 +300,71 @@ internal sealed partial class GitHubApiService : ICleanUpService
             });
         }
 
+        int fileCount = 0;
+        int uploadedFileCount = 0;
+
         foreach (string filePath in Directory.EnumerateFiles(stagingFolder, "*", SearchOption.AllDirectories))
         {
             string relativePath = Path.GetRelativePath(stagingFolder, filePath).Replace(Path.DirectorySeparatorChar, '/');
             byte[] rawContent = await File.ReadAllBytesAsync(filePath);
-            string encodedContent = Convert.ToBase64String(rawContent);
+            string blobSha = GitHelpers.ComputeBlobSha(rawContent);
 
-            NewBlob newBlob = new()
+            fileCount++;
+
+            if (!_knownBlobShas.Contains(blobSha))
             {
-                Encoding = EncodingType.Base64,
-                Content = encodedContent,
-            };
+                NewBlob newBlob = new()
+                {
+                    Encoding = EncodingType.Base64,
+                    Content = Convert.ToBase64String(rawContent),
+                };
 
-            BlobReference blob = await _client.Git.Blob.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newBlob);
+                BlobReference blob = await _client.Git.Blob.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newBlob);
+
+                if (!string.Equals(blob.Sha, blobSha, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException($"Locally computed blob SHA {blobSha} of \"{relativePath}\" does not match the SHA {blob.Sha} returned by GitHub.");
+                }
+
+                _knownBlobShas.Add(blobSha);
+                uploadedFileCount++;
+            }
 
             newTree.Tree.Add(new()
             {
                 Path = relativePath,
                 Mode = Octokit.FileMode.File,
                 Type = TreeType.Blob,
-                Sha = blob.Sha,
+                Sha = blobSha,
             });
         }
 
+        LogBlobsUploaded(uploadedFileCount, fileCount);
         LogCreatingCommit(newTree.Tree.Count, _packageManifest.TargetBranchName, commitMessage);
 
         TreeResponse tree = await _client.Git.Tree.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newTree);
 
-        NewCommit newCommit = new(commitMessage, tree.Sha, [branchReference.Object.Sha]);
+        NewCommit newCommit = new(commitMessage, tree.Sha, [parentCommitSha]);
 
         Commit commit = await _client.Git.Commit.Create(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, newCommit);
 
         await _client.Git.Reference.Update(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.TargetBranchReference, new ReferenceUpdate(commit.Sha));
 
+        _targetBranchHead = (commit.Sha, tree.Sha);
+
         return commit.Sha;
+    }
+
+    /// <summary>
+    /// Fetches the commit the target branch currently points to, along with that commit's tree.
+    /// </summary>
+    /// <returns>The SHA of the branch's head commit and the SHA of its tree.</returns>
+    private async Task<(string CommitSha, string TreeSha)> GetTargetBranchHead()
+    {
+        Reference branchReference = await _client.Git.Reference.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, _packageManifest.TargetBranchReference);
+        Commit currentCommit = await _client.Git.Commit.Get(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, branchReference.Object.Sha);
+
+        return (currentCommit.Sha, currentCommit.Tree.Sha);
     }
 
     /// <summary>
@@ -290,6 +409,10 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <remarks>
     /// This method generates a tag name and release name based on the provided <paramref name="packageVersion"/> and creates a release in the repository
     /// specified by the package manifest. The release is associated with the branch reference defined in the package manifest.
+    /// <para>
+    /// The tag must not exist yet: GitHub would silently attach the release to the existing tag and ignore the target branch, so the release would point
+    /// at the tag's old commit instead of the branch head.
+    /// </para>
     /// </remarks>
     /// <param name="packageVersion">
     /// The version of the package to be released. Determines the tag name, release name, and whether the release is marked as a prerelease.
@@ -297,9 +420,16 @@ internal sealed partial class GitHubApiService : ICleanUpService
     /// <param name="releaseNotes">
     /// The release notes describing the changes in this release. These will be included in the release body.
     /// </param>
+    /// <exception cref="InvalidOperationException">The tag for <paramref name="packageVersion"/> already exists in the repository.</exception>
     public async Task CreateRelease(SemanticVersion packageVersion, string releaseNotes)
     {
         string tagName = GitHelpers.GenerateTagName(packageVersion);
+
+        if (await PackageTagExists(tagName))
+        {
+            throw new InvalidOperationException($"Tag \"{tagName}\" already exists in the repository; a release for it would not point at the head of branch \"{_packageManifest.TargetBranchName}\".");
+        }
+
         string releaseName = GitHelpers.GenerateReleaseName(packageVersion);
 
         LogCreatingRelease(tagName, releaseName);
@@ -311,6 +441,8 @@ internal sealed partial class GitHubApiService : ICleanUpService
             Body = releaseNotes,
             Prerelease = packageVersion.IsPrerelease,
         });
+
+        _packageTagNames.Add(tagName); // creating the release has created the tag as well
     }
 
     /// <summary>
@@ -359,12 +491,17 @@ internal sealed partial class GitHubApiService : ICleanUpService
 
                 LogDeletingTag(tagName);
                 await _client.Git.Reference.Delete(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, tag.Ref); // delete tag
+
+                _packageTagNames?.Remove(tagName);
             }
 
             string branchName = GitHelpers.GetBranchName(otherBranch.Ref);
 
             LogDeletingBranch(branchName);
             await _client.Git.Reference.Delete(_packageManifest.RepositoryOwner, _packageManifest.RepositoryName, otherBranch.Ref); // delete branch
+
+            _targetBranchEnsured = false;
+            _targetBranchHead = null;
         }
 
         return true;

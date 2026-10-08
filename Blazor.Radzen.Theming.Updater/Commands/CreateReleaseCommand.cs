@@ -160,11 +160,11 @@ internal sealed partial class CreateReleaseCommand : IDisposable
 
             LogPackageVersionResolved(packageVersion);
 
-            string? existingTag = await _gitHubApiService.PackageTagExists(packageVersion);
+            string packageTagName = GitHelpers.GenerateTagName(packageVersion);
 
-            if (!string.IsNullOrEmpty(existingTag))
+            if (await _gitHubApiService.PackageTagExists(packageTagName))
             {
-                LogTagAlreadyExists(existingTag);
+                LogTagAlreadyExists(packageTagName);
                 return;
             }
 

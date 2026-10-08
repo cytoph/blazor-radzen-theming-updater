@@ -295,7 +295,7 @@ internal sealed partial class FileService : ICleanUpService
 
         LogPreparingContentFileFetch(repositoryReference, contentFolderPath);
 
-        await InternalCopyContentFiles(contentFolderPath, string.Empty, repositoryReference, cancellationToken);
+        await InternalCopyContentFiles(contentFolderPath, repositoryReference, cancellationToken);
     }
 
     /// <summary>
@@ -367,46 +367,36 @@ internal sealed partial class FileService : ICleanUpService
     }
 
     /// <summary>
-    /// Recursively copies content files from a specified repository path to a local content folder.
+    /// Copies the content files of the repository's content folder, including all subfolders, to a local content folder.
     /// </summary>
     /// <param name="contentFolderPath">The content folder base path where files will be copied to preserving relative directory structure.</param>
-    /// <param name="relativePath">The relative path within the repository to start copying from.</param>
     /// <param name="repositoryReference">The reference to the repository (e.g., commit ID or tag) to pull files from.</param>
     /// <param name="cancellationToken">A token to monitor for cancellation requests. The operation will terminate early if the token is canceled.</param>
-    private async Task InternalCopyContentFiles(string contentFolderPath, string relativePath, string repositoryReference, CancellationToken cancellationToken = default)
+    private async Task InternalCopyContentFiles(string contentFolderPath, string repositoryReference, CancellationToken cancellationToken = default)
     {
-        string[] relativePathSegments = relativePath.Split('/');
+        string repositoryFolderPath = _basePackageManifest.ContentFolderPath.Replace(Path.DirectorySeparatorChar, '/'); // GitHub API expects forward slashes
 
-        string localFolderPath = Path.Combine([contentFolderPath, .. relativePathSegments]);
+        Directory.CreateDirectory(contentFolderPath);
 
-        Directory.CreateDirectory(localFolderPath);
-
-        string repositoryFolderPath = Path.Combine([_basePackageManifest.ContentFolderPath, .. relativePathSegments])
-            .Replace(Path.DirectorySeparatorChar, '/'); // GitHub API expects forward slashes
-
-        LogStartingRepositoryFolderEnumeration(repositoryFolderPath, localFolderPath);
+        LogStartingRepositoryFolderEnumeration(repositoryFolderPath, contentFolderPath);
 
         GitContent[] contents = await _gitHubApiService.GetBasePackageRepositoryContentsAsync(repositoryFolderPath, repositoryReference);
 
         LogRepositoryItemsFound(contents.Length, repositoryFolderPath);
 
+        foreach (GitContent content in contents.Where(c => c.Type == GitContentType.Directory))
+        {
+            Directory.CreateDirectory(Path.Combine(contentFolderPath, Path.GetRelativePath(repositoryFolderPath, content.Path)));
+        }
+
         List<Task> tasks = [];
 
-        foreach (GitContent content in contents)
+        foreach (GitContent content in contents.Where(c => c.Type == GitContentType.File))
         {
-            if (content.Type == GitContentType.File)
-            {
-                string relativeFilePath = Path.GetRelativePath(_basePackageManifest.ContentFolderPath, content.Path);
-                string localFilePath = Path.Combine(contentFolderPath, relativeFilePath);
+            string relativeFilePath = Path.GetRelativePath(repositoryFolderPath, content.Path);
+            string localFilePath = Path.Combine(contentFolderPath, relativeFilePath);
 
-                tasks.Add(DownloadFileAsync(content.DownloadUrl!, localFilePath, cancellationToken));
-            }
-            else if (content.Type == GitContentType.Directory)
-            {
-                string newRelativePath = Path.Combine(relativePath, content.Name).Replace(Path.DirectorySeparatorChar, '/');
-
-                tasks.Add(InternalCopyContentFiles(contentFolderPath, newRelativePath, repositoryReference, cancellationToken));
-            }
+            tasks.Add(DownloadFileAsync(content.DownloadUrl!, localFilePath, cancellationToken));
         }
 
         await Task.WhenAll(tasks);
