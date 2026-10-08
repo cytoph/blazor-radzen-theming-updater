@@ -15,6 +15,10 @@ on:
         default: ''
         type: string
 
+permissions:
+  contents: read
+  id-token: write # required for NuGet trusted publishing
+
 jobs:
   republish:
     runs-on: windows-latest
@@ -28,11 +32,17 @@ jobs:
       with:
         dotnet-version: '9.0.x'
 
+    - name: NuGet login (trusted publishing)
+      uses: NuGet/login@v1
+      id: nuget-login
+      with:
+        user: cytoph
+
     - name: Run republish
       working-directory: .\Blazor.Radzen.Theming.Updater
       env:
         GITHUB__TOKEN: ${{ secrets.REPO_TOKEN }}
-        NUGET__APIKEY: ${{ secrets.NUGET_API_KEY }}
+        NUGET__APIKEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
       run: |
         $fromArg = "${{ github.event.inputs.from }}"
         $extraArgs = "${{ github.event.inputs.parameters }}"
