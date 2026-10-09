@@ -33,6 +33,12 @@ partial class FileService
     [LoggerMessage(Level = LogLevel.Trace, Message = "Copying asset file to {FilePath}.")]
     partial void LogCopyingAssetFile(string filePath);
 
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Applying modifications for base package version {BasePackageVersion}.")]
+    partial void LogApplyingModifications(SemanticVersion basePackageVersion);
+
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Modifying fonts path in file {FilePath}.")]
+    partial void LogModifyingFontsPath(string filePath);
+
     [LoggerMessage(Level = LogLevel.Trace, Message = "Retrieving template content from file {FilePath}.")]
     partial void LogRetrievingTemplateContent(string filePath);
 

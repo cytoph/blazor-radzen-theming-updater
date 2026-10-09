@@ -173,6 +173,7 @@ internal sealed partial class RepublishCommand : IDisposable
             await iterationFileService.GenerateBuildPropertiesFile(cancellationToken);
             await iterationFileService.CopyContentFiles(basePackageRepositoryReference, cancellationToken);
             await iterationFileService.CopyAssetFiles(cancellationToken);
+            await iterationFileService.ApplyModifications(basePackageVersion, cancellationToken);
 
             LogPackageFilesAssembled(stagingFolder);
 

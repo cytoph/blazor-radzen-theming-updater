@@ -330,6 +330,26 @@ internal sealed partial class FileService : ICleanUpService
     }
 
     /// <summary>
+    /// Applies modifications to the assembled files in the staging folder.
+    /// </summary>
+    /// <remarks>
+    /// Has to be called after <see cref="CopyContentFiles"/> and <see cref="CopyAssetFiles"/>, so modifications can target both the base package's content
+    /// files and our own asset files. Every modification fails loudly when the file it targets doesn't look exactly as expected.
+    /// </remarks>
+    /// <param name="basePackageVersion">The version of the base package, so modifications can react to differences between base package versions.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests. The operation will terminate early if the token is canceled.</param>
+    public async Task ApplyModifications(SemanticVersion basePackageVersion, CancellationToken cancellationToken = default)
+    {
+        EnsureStagingFolder();
+
+        string contentFolderPath = Path.Combine(_stagingFolder, _artifactOptions.PackageContentFolderName);
+
+        LogApplyingModifications(basePackageVersion);
+
+        await ModifyFontsPath(contentFolderPath, cancellationToken);
+    }
+
+    /// <summary>
     /// Gets the content of a template file embedded as a resource in the assembly.
     /// </summary>
     /// <param name="templateFileName">The name of the template file whose content is to be retrieved.</param>
@@ -426,10 +446,61 @@ internal sealed partial class FileService : ICleanUpService
         Directory.Delete(stagingFolder, true);
     }
 
+    #region Modifications
+
+    /// <summary>
+    /// Replaces the hard-set fonts path in the base package's fonts file with one pointing to the base package's static web assets.
+    /// </summary>
+    /// <remarks>
+    /// The base package sets <c>$fonts-path</c> to <c>../fonts</c> without <c>!default</c>, so consumers can neither override it nor reach the fonts, which
+    /// are served at <c>_content/Radzen.Blazor/fonts</c>. Only the first line is replaced; the rest of the file is preserved byte for byte.
+    /// </remarks>
+    /// <param name="contentFolderPath">The path of the content folder within the staging folder.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests. The operation will terminate early if the token is canceled.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the fonts file doesn't exist or its first line doesn't match the expected one exactly.</exception>
+    private async Task ModifyFontsPath(string contentFolderPath, CancellationToken cancellationToken = default)
+    {
+        const string FontsFileName = "_fonts.scss";
+        const string OriginalFontsPathLine = "$fonts-path: '../fonts';";
+        const string ModifiedFontsPathLine = "$fonts-path: '../_content/Radzen.Blazor/fonts' !default;";
+
+        string filePath = Path.Combine(contentFolderPath, FontsFileName);
+
+        if (!File.Exists(filePath))
+            throw new InvalidOperationException($"Cannot modify the fonts path, because the fonts file {filePath} does not exist.");
+
+        byte[] fileContent = await File.ReadAllBytesAsync(filePath, cancellationToken);
+
+        int lineFeedIndex = Array.IndexOf(fileContent, (byte)'\n');
+        int firstLineLength = lineFeedIndex < 0 ? fileContent.Length : lineFeedIndex;
+
+        if (firstLineLength > 0 && fileContent[firstLineLength - 1] == '\r')
+        {
+            firstLineLength--;
+        }
+
+        string firstLine = Encoding.UTF8.GetString(fileContent, 0, firstLineLength);
+
+        if (firstLine != OriginalFontsPathLine)
+            throw new InvalidOperationException($"Cannot modify the fonts path, because the first line of {filePath} is \"{firstLine}\" instead of \"{OriginalFontsPathLine}\".");
+
+        byte[] modifiedContent = [.. Encoding.UTF8.GetBytes(ModifiedFontsPathLine), .. fileContent[firstLineLength..]];
+
+        LogModifyingFontsPath(filePath);
+
+        await File.WriteAllBytesAsync(filePath, modifiedContent, cancellationToken);
+    }
+
+    #endregion // Modifications
+
+    #region ICleanUpService
+
     /// <inheritdoc/>
     async Task<bool> ICleanUpService.CleanUpAsync(SemanticVersion latestPackageVersion, CancellationToken cancellationToken)
     {
         await DeleteStagingFolderAsync();
         return true;
     }
+
+    #endregion // ICleanUpService
 }
