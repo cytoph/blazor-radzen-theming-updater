@@ -41,7 +41,9 @@ internal static class GitHelpers
 
     public static string GetTagReferenceShortName(SemanticVersion version) => $"{TagsCategory}/{GenerateTagName(version)}";
 
-    public static string GetTagReference(SemanticVersion version) => $"{TagsNamespace}/{GenerateTagName(version)}";
+    public static string GetTagReference(SemanticVersion version) => GetTagReference(GenerateTagName(version));
+
+    public static string GetTagReference(string tagName) => $"{TagsNamespace}/{tagName}";
 
     public static bool IsTagReference(string tagReference)
     {

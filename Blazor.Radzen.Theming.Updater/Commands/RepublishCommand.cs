@@ -162,7 +162,7 @@ internal sealed partial class RepublishCommand : IDisposable
 
             LogTargetFrameworksExtracted(string.Join(", ", targetFrameworks.Select(tf => tf.GetShortFolderName())));
 
-            string basePackageRepositoryReference = baseCommitId ?? GitHelpers.GetTagReference(basePackageVersion);
+            string basePackageRepositoryReference = baseCommitId ?? GitHelpers.GetTagReference($"v{basePackageVersion}");
 
             string stagingFolder = iterationFileService.CreateStagingFolder(packageVersion);
 
@@ -183,7 +183,7 @@ internal sealed partial class RepublishCommand : IDisposable
             {
                 await _gitHubApiService.EnsureBranchExists();
 
-                string? basePackageReleaseUrl = await _gitHubApiService.GetBasePackageReleaseUrl(basePackageRepositoryReference);
+                string? basePackageReleaseUrl = await _gitHubApiService.GetBasePackageReleaseUrl(basePackageVersion);
                 string commitMessage = _gitHubApiService.GenerateCommitMessage(packageVersion, basePackageVersion);
 
                 LogCommitMessageConstructed(commitMessage);

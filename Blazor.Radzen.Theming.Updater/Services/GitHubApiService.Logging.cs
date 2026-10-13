@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using NuGet.Versioning;
 
 namespace Blazor.Radzen.Theming.Updater.Services;
 
@@ -13,8 +14,8 @@ partial class GitHubApiService
     [LoggerMessage(Level = LogLevel.Warning, Message = "Recursive listing of path {FolderPath} at reference {Reference} was truncated by GitHub; falling back to listing it directory by directory.")]
     partial void LogRepositoryTreeTruncated(string folderPath, string reference);
 
-    [LoggerMessage(Level = LogLevel.Trace, Message = "Fetching release URL for base package reference {Reference}.")]
-    partial void LogFetchingBasePackageReleaseUrl(string reference);
+    [LoggerMessage(Level = LogLevel.Trace, Message = "Fetching release URL for base package version {BasePackageVersion}.")]
+    partial void LogFetchingBasePackageReleaseUrl(SemanticVersion basePackageVersion);
 
     [LoggerMessage(Level = LogLevel.Trace, Message = "Generating commit message for package version {PackageVersion} based on {BasePackageVersion}.")]
     partial void LogCommitMessageGenerated(string packageVersion, string basePackageVersion);

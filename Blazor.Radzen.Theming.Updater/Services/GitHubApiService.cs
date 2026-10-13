@@ -21,7 +21,6 @@ internal sealed partial class GitHubApiService : ICleanUpService
     private readonly GitHubClient _client;
 
     private (DateTimeOffset CreatedAt, IReadOnlyList<Release> Releases)? _basePackageReleasesCache;
-    private (DateTimeOffset CreatedAt, IReadOnlyList<Reference> Tags)? _basePackageTagsCache;
 
     private HashSet<string>? _packageTagNames;
     private bool _targetBranchEnsured;
@@ -189,38 +188,25 @@ internal sealed partial class GitHubApiService : ICleanUpService
     }
 
     /// <summary>
-    /// Retrieves the URL of the base package release associated with the specified Git reference.
+    /// Retrieves the URL of the base package release for the specified base package version.
     /// </summary>
     /// <remarks>
-    /// This method resolves the provided Git reference to a tag name, if necessary, and searches for
-    /// a release associated with that tag. If the reference does not correspond to a valid tag or release, the method
-    /// returns <see langword="null"/>.
+    /// The release is matched by its tag name, which is the version with or without the "v" prefix, since the base
+    /// repository uses both. It is deliberately not resolved via the commit the package was built from: the base
+    /// repository occasionally places several version tags on the same commit, and the commit a package was built
+    /// from is not always the one its version tag points to, so a commit match can yield another version's release.
     /// </remarks>
-    /// <param name="reference">The Git reference, which can be a commit ID or a tag reference.</param>
+    /// <param name="basePackageVersion">The base package version whose release is looked up.</param>
     /// <returns>The URL of the base package release if a matching release is found; otherwise, <see langword="null"/>.</returns>
-    public async Task<string?> GetBasePackageReleaseUrl(string reference)
+    public async Task<string?> GetBasePackageReleaseUrl(SemanticVersion basePackageVersion)
     {
-        LogFetchingBasePackageReleaseUrl(reference);
+        LogFetchingBasePackageReleaseUrl(basePackageVersion);
 
         IReadOnlyList<Release> releases = await GetCachedBasePackageReleases();
 
-        string? tagName = GitHelpers.IsTagReference(reference) ? GitHelpers.GetTagName(reference) : null;
+        string[] versionTagNames = [$"v{basePackageVersion}", basePackageVersion.ToString()];
 
-        if (string.IsNullOrEmpty(tagName))
-        {
-            IReadOnlyList<Reference> tags = await GetCachedBasePackageTags();
-
-            Reference? tag = tags.FirstOrDefault(t => t.Object.Type == TaggedType.Commit && t.Object.Sha == reference);
-
-            if (tag is null)
-            {
-                return null;
-            }
-
-            tagName = GitHelpers.GetTagName(tag.Ref);
-        }
-
-        return releases.FirstOrDefault(r => r.TagName == tagName)?.HtmlUrl;
+        return releases.FirstOrDefault(r => versionTagNames.Contains(r.TagName))?.HtmlUrl;
     }
 
     /// <summary>
@@ -527,27 +513,6 @@ internal sealed partial class GitHubApiService : ICleanUpService
         }
 
         return releases;
-    }
-
-    /// <summary>
-    /// Retrieves a cached list of base package tags, refreshing the cache if it has expired.
-    /// </summary>
-    /// <remarks>
-    /// The cache is refreshed if it is older than the configured expiration time. If the cache is refreshed, the method fetches the latest tags from the
-    /// repository specified in the base package manifest.
-    /// </remarks>
-    /// <returns>A read-only list of <see cref="Reference"/> objects representing the base package tags.</returns>
-    private async Task<IReadOnlyList<Reference>> GetCachedBasePackageTags()
-    {
-        DateTimeOffset maxAge = DateTimeOffset.UtcNow.Add(-CacheExpiration);
-
-        if (_basePackageTagsCache is not { CreatedAt: DateTimeOffset createdAt, Tags: IReadOnlyList<Reference> tags } || createdAt <= maxAge)
-        {
-            tags = await _client.Git.Reference.GetAllForSubNamespace(_basePackageManifest.RepositoryOwner, _basePackageManifest.RepositoryName, GitHelpers.TagsCategory);
-            _basePackageTagsCache = (DateTimeOffset.UtcNow, tags);
-        }
-
-        return tags;
     }
 
     /// <inheritdoc/>
