@@ -81,7 +81,7 @@ partial class CreateReleaseCommand
     partial void LogCommitSkipped();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Package {PackageId} version {Version} has been completed in {ElapsedTimeMS} ms.")]
-    partial void LogPackageCompleted(string packageId, SemanticVersion version, int elapsedTimeMs);
+    partial void LogPackageCompleted(string packageId, SemanticVersion version, long elapsedTimeMs);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Staging folder deletion has been skipped.")]
     partial void LogStagingFolderDeletionSkipped();

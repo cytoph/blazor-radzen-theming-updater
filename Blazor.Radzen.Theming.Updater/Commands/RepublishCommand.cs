@@ -240,7 +240,7 @@ internal sealed partial class RepublishCommand : IDisposable
 
             TimeSpan elapsedTime = Stopwatch.GetElapsedTime(startTs);
 
-            LogPackageCompleted(_packageManifest.Id, packageVersion, elapsedTime.Milliseconds);
+            LogPackageCompleted(_packageManifest.Id, packageVersion, (long)elapsedTime.TotalMilliseconds);
         }
 
         if (!_stagingOptions.KeepFolder)

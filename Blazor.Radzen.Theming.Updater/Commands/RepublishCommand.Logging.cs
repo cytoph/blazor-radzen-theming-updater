@@ -35,7 +35,7 @@ partial class RepublishCommand
     [LoggerMessage(Level = LogLevel.Debug, Message = "Resolved package version will be {PackageVersion}.")]
     partial void LogPackageVersionResolved(SemanticVersion packageVersion);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Tag {TagName} already exists in the repository. Aborting further operations.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tag {TagName} already exists in the repository. Skipping this version.")]
     partial void LogTagAlreadyExists(string tagName);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Target frameworks extracted from base package are {TargetFrameworks}.")]
@@ -75,7 +75,7 @@ partial class RepublishCommand
     partial void LogCannotUsePushWithNoCommit();
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Package {PackageId} version {Version} has been completed in {ElapsedTimeMS} ms.")]
-    partial void LogPackageCompleted(string packageId, SemanticVersion version, int elapsedTimeMs);
+    partial void LogPackageCompleted(string packageId, SemanticVersion version, long elapsedTimeMs);
 
     [LoggerMessage(Level = LogLevel.Debug, Message = "Staging folder deletion has been skipped.")]
     partial void LogStagingFolderDeletionSkipped();
